@@ -4,5 +4,5 @@
     <string name="shortcut_snap_long">Snap a photo of your meal</string>
     <string name="shortcut_type">Log by text</string>
     <string name="shortcut_type_long">Describe what you ate</string>
-    <string name="widget_description">Calories left today, with buttons to snap or type a meal</string>
+    <string name="widget_description">Calories left today. Tap to open Ounce.</string>
 </resources>

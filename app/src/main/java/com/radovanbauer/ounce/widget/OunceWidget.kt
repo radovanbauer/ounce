@@ -2,53 +2,53 @@ package com.radovanbauer.ounce.widget
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.action.actionStartActivity
-import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
-import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.width
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import com.radovanbauer.ounce.data.DayTotal
-import com.radovanbauer.ounce.data.Goals
 import com.radovanbauer.ounce.data.Repo
-import com.radovanbauer.ounce.ui.ACTION_SNAP
-import com.radovanbauer.ounce.ui.ACTION_TYPE
 import com.radovanbauer.ounce.ui.MainActivity
 import com.radovanbauer.ounce.ui.OunceApp
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Home-screen widget: today's calories left, macro progress, and one-tap snap / type buttons. */
+/** Home-screen widget: just the calorie ring from the Today screen. Tapping it opens the app. */
 class OunceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = (context.applicationContext as OunceApp).repo
-        val totals = repo.meals.totalsOn(Repo.today())
-        val goals = repo.settings.goals
-        provideContent { GlanceTheme { WidgetContent(context, totals, goals) } }
+        val eaten = repo.meals.totalsOn(Repo.today())?.kcal ?: 0.0
+        val goal = repo.settings.goals.kcal
+        val left = (goal - eaten).roundToInt()
+        val ring = drawRing(context, eaten, goal)
+        val open = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        provideContent {
+            Box(GlanceModifier.fillMaxSize().padding(4.dp).clickable(actionStartActivity(open)),
+                contentAlignment = Alignment.Center) {
+                Image(ImageProvider(ring),
+                    contentDescription = if (left >= 0) "$left calories left today" else "${-left} calories over today",
+                    contentScale = ContentScale.Fit, modifier = GlanceModifier.fillMaxSize())
+            }
+        }
     }
 
     companion object {
@@ -60,70 +60,53 @@ class OunceWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = OunceWidget()
 }
 
-private val ProteinColor = ColorProvider(Color(0xFF3B82F6))
-private val CarbsColor = ColorProvider(Color(0xFFF59E0B))
-private val FatColor = ColorProvider(Color(0xFFEC4899))
+/**
+ * Same design as the app's SummaryCard ring, drawn to a bitmap (widgets can't draw arcs), in the
+ * Material You colours the app uses: primary = accent1 200/600, track = neutral2 700/100.
+ */
+private fun drawRing(context: Context, eaten: Double, goal: Int): Bitmap {
+    val dark = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    fun c(id: Int) = context.getColor(id)
+    val surface = c(if (dark) android.R.color.system_neutral1_900 else android.R.color.system_neutral1_10)
+    val track = c(if (dark) android.R.color.system_neutral2_700 else android.R.color.system_neutral2_100)
+    val primary = c(if (dark) android.R.color.system_accent1_200 else android.R.color.system_accent1_600)
+    val onSurface = c(if (dark) android.R.color.system_neutral1_50 else android.R.color.system_neutral1_900)
+    val muted = c(if (dark) android.R.color.system_neutral2_200 else android.R.color.system_neutral2_700)
+    val error = if (dark) 0xFFF2B8B5.toInt() else 0xFFB3261E.toInt() // Material 3 error
 
-@Composable
-private fun WidgetContent(context: Context, t: DayTotal?, goals: Goals) {
-    val kcal = t?.kcal ?: 0.0
-    val left = goals.kcal - kcal
-    val over = left < 0
-    fun open(action: String?) = actionStartActivity(Intent(context, MainActivity::class.java).apply {
-        if (action != null) setAction(action)
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-    })
-    val onSurface = GlanceTheme.colors.onSurface
-    val muted = GlanceTheme.colors.onSurfaceVariant
+    val size = 400
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val cv = Canvas(bmp)
+    val center = size / 2f
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    Column(
-        GlanceModifier.fillMaxSize().background(GlanceTheme.colors.widgetBackground).cornerRadius(20.dp)
-            .padding(14.dp).clickable(open(null)),
-    ) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(GlanceModifier.defaultWeight()) {
-                Text("${abs(left).roundToInt()} kcal ${if (over) "over" else "left"}",
-                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                        color = if (over) GlanceTheme.colors.error else onSurface))
-                Text("${kcal.roundToInt()} / ${goals.kcal} today", style = TextStyle(fontSize = 12.sp, color = muted))
-            }
-            ActionButton("📷", open(ACTION_SNAP))
-            Spacer(GlanceModifier.width(6.dp))
-            ActionButton("✏️", open(ACTION_TYPE))
-        }
-        Spacer(GlanceModifier.height(8.dp))
-        LinearProgressIndicator(
-            progress = (kcal / goals.kcal.coerceAtLeast(1)).toFloat().coerceIn(0f, 1f),
-            modifier = GlanceModifier.fillMaxWidth().height(6.dp),
-            color = if (over) GlanceTheme.colors.error else GlanceTheme.colors.primary,
-            backgroundColor = GlanceTheme.colors.surfaceVariant,
-        )
-        Spacer(GlanceModifier.height(8.dp))
-        Row(GlanceModifier.fillMaxWidth()) {
-            Macro("P", t?.protein ?: 0.0, goals.protein, ProteinColor, GlanceModifier.defaultWeight())
-            Macro("C", t?.carbs ?: 0.0, goals.carbs, CarbsColor, GlanceModifier.defaultWeight())
-            Macro("F", t?.fat ?: 0.0, goals.fat, FatColor, GlanceModifier.defaultWeight())
-        }
+    p.color = surface
+    cv.drawCircle(center, center, center, p)
+
+    val stroke = size * 0.085f
+    val inset = size * 0.1f + stroke / 2
+    val oval = RectF(inset, inset, size - inset, size - inset)
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = stroke
+    p.color = track
+    cv.drawArc(oval, 0f, 360f, false, p)
+    val over = eaten > goal
+    val sweep = (360f * (eaten / goal.coerceAtLeast(1)).toFloat()).coerceIn(0f, 360f)
+    if (sweep > 0f) {
+        p.color = if (over) error else primary
+        p.strokeCap = Paint.Cap.ROUND
+        cv.drawArc(oval, -90f, sweep, false, p)
     }
-}
 
-@Composable
-private fun ActionButton(label: String, action: androidx.glance.action.Action) {
-    Box(
-        GlanceModifier.width(44.dp).height(44.dp).cornerRadius(22.dp)
-            .background(GlanceTheme.colors.primaryContainer).clickable(action),
-        contentAlignment = Alignment.Center,
-    ) { Text(label, style = TextStyle(fontSize = 18.sp)) }
-}
-
-@Composable
-private fun Macro(label: String, value: Double, goal: Int, color: ColorProvider, modifier: GlanceModifier) {
-    Column(modifier.padding(end = 6.dp)) {
-        Text("$label ${value.roundToInt()}/$goal", style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant))
-        LinearProgressIndicator(
-            progress = (value / goal.coerceAtLeast(1)).toFloat().coerceIn(0f, 1f),
-            modifier = GlanceModifier.fillMaxWidth().height(4.dp),
-            color = color, backgroundColor = GlanceTheme.colors.surfaceVariant,
-        )
-    }
+    p.style = Paint.Style.FILL
+    p.textAlign = Paint.Align.CENTER
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    p.color = onSurface
+    p.textSize = size * 0.2f
+    cv.drawText(abs(goal - eaten).roundToInt().toString(), center, center + size * 0.04f, p)
+    p.typeface = Typeface.DEFAULT
+    p.color = muted
+    p.textSize = size * 0.075f
+    cv.drawText(if (over) "kcal over" else "kcal left", center, center + size * 0.15f, p)
+    return bmp
 }
