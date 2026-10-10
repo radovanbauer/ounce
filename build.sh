@@ -9,13 +9,16 @@ cd "$(dirname "$0")"
 IMG=ounce-android-builder
 ADB_CTR=ounce-adb
 mkdir -p "$HOME/.cache/ounce-gradle" "$HOME/.android-docker"
+# same signing key as CI builds, if present (must live in ~/.android-docker)
+[ -f "$HOME/.android-docker/ounce-signing.keystore" ] && OUNCE_KEYSTORE_HOST="$HOME/.android-docker/ounce-signing.keystore"
 docker image inspect "$IMG" >/dev/null 2>&1 || docker build -t "$IMG" docker/
 
 # Hard caps so a build can't push a shared machine into swap: no swap use, 2 CPUs, low priority.
 LIMITS=(--memory=2560m --memory-swap=2560m --cpus=2 --cpu-shares=256)
 RUN=(nice -n 15 docker run --rm "${LIMITS[@]}" --network host -v "$PWD":/work -w /work
      -v "$HOME/.cache/ounce-gradle":/root/.gradle -v "$HOME/.android-docker":/root/.android
-     -e ANDROID_HOME=/opt/android-sdk "$IMG")
+     -e ANDROID_HOME=/opt/android-sdk
+     ${OUNCE_KEYSTORE_HOST:+-e OUNCE_KEYSTORE=/root/.android/$(basename "$OUNCE_KEYSTORE_HOST")} "$IMG")
 
 # A long-running adb server container keeps wifi pairing/connections alive between commands.
 ensure_adb() {

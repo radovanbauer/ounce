@@ -1,10 +1,13 @@
 # Building
 
 ## GitHub Actions (recommended)
-Every push builds the debug APK (`.github/workflows/android.yml`); download the `ounce-apk` artifact from the run.
+Every push builds the APK (`.github/workflows/android.yml`). Pushes to `main` also publish a GitHub Release:
+<https://github.com/radovanbauer/ounce/releases/latest/download/ounce.apk>
 
-To make CI builds install as updates of your local builds, add a repository secret `DEBUG_KEYSTORE_B64` containing
-your debug keystore: `base64 -w0 ~/.android-docker/debug.keystore` (or `~/.android/debug.keystore`).
+Builds are signed with the keystore in the repository secret `SIGNING_KEYSTORE_B64` (base64 of a keystore with
+alias `androiddebugkey`, password `android`), so every build installs as an update of the previous one. Local builds
+use the same key when `~/.android-docker/ounce-signing.keystore` exists. Keep a backup of that keystore: without it,
+existing installs can't be updated.
 
 ## Locally
 Requirements: Docker and ~2.5 GB of free RAM.

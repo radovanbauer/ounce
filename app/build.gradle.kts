@@ -15,6 +15,23 @@ android {
         versionCode = 3
         versionName = "0.3.0"
     }
+    // A stable signing key (OUNCE_KEYSTORE, alias androiddebugkey / password android) so every build, local or CI,
+    // installs as an update of the previous one. Without it Gradle falls back to the machine's own debug key.
+    signingConfigs {
+        System.getenv("OUNCE_KEYSTORE")?.let { path ->
+            create("ounce") {
+                storeFile = file(path)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            signingConfigs.findByName("ounce")?.let { signingConfig = it }
+        }
+    }
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
