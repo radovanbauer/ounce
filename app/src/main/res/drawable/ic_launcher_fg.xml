@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The "o" of Ounce as the app's calorie ring: faint full track + three-quarter arc. 108dp adaptive canvas,
+     kept inside the 66dp safe zone. Also used as the monochrome (themed icon) layer. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="3.5" android:fillColor="#00000000"
-        android:pathData="M54,32 a22,22 0 1,1 -0.01,0 z" />
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000"
-        android:pathData="M54,40.5 A13.5,13.5 0 1,1 40.5,54" />
+    <path android:strokeColor="#59FFFFFF" android:strokeWidth="7.5" android:fillColor="#00000000"
+        android:pathData="M54,34 a20,20 0 1,1 -0.01,0 z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="7.5" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M54,34 A20,20 0 1,1 34,54" />
 </vector>

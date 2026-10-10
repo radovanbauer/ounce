@@ -12,8 +12,8 @@ android {
         applicationId = "com.radovanbauer.ounce"
         minSdk = 31
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.4.2"
     }
     // A stable signing key (OUNCE_KEYSTORE, alias androiddebugkey / password android) so every build, local or CI,
     // installs as an update of the previous one. Without it Gradle falls back to the machine's own debug key.
