@@ -58,15 +58,19 @@ object OpenFoodFacts {
     internal fun parse(code: String, p: JSONObject): Product {
         val n = p.optJSONObject("nutriments") ?: JSONObject()
         fun num(key: String): Double? = n.opt(key)?.toString()?.toDoubleOrNull()
+        // optString() turns JSON null into the text "null"
+        fun str(key: String): String = if (p.isNull(key)) "" else p.optString(key).trim()
         val kcal = num("energy-kcal_100g") ?: num("energy_100g")?.let { it / 4.184 } // energy_100g is kJ
             ?: throw ProductNotFound(code)
         val name = listOf("product_name", "product_name_en", "generic_name")
-            .map { p.optString(it).trim() }.firstOrNull { it.isNotEmpty() } ?: "Product $code"
-        val brand = p.optString("brands").split(',').firstOrNull()?.trim().orEmpty()
+            .map { str(it) }.firstOrNull { it.isNotEmpty() } ?: "Product $code"
+        // first brand that isn't just the product name again ("Nutella" by "Nutella, Ferrero" -> Ferrero)
+        val brand = str("brands").split(',').map { it.trim() }
+            .firstOrNull { it.isNotEmpty() && !name.contains(it, ignoreCase = true) }.orEmpty()
         val servingGrams = p.opt("serving_quantity")?.toString()?.toDoubleOrNull()?.takeIf { it > 0 }
         return Product(
             code = code, name = name, brand = brand,
-            servingLabel = p.optString("serving_size").trim().ifEmpty { null },
+            servingLabel = str("serving_size").ifEmpty { null },
             servingGrams = servingGrams,
             kcal = kcal, protein = num("proteins_100g") ?: 0.0,
             carbs = num("carbohydrates_100g") ?: 0.0, fat = num("fat_100g") ?: 0.0,
