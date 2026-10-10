@@ -31,3 +31,6 @@ See [BUILDING.md](BUILDING.md).
 
 ## Data
 Nutrition data: [USDA FoodData Central](https://fdc.nal.usda.gov/) (SR Legacy and FNDDS), public domain.
+
+## License
+[MIT](LICENSE)
