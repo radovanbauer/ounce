@@ -35,13 +35,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.radovanbauer.ounce.data.Repo
+import kotlinx.coroutines.launch
 
 /**
  * One-tap meal capture: shutter -> photo is handed to the background logger -> straight back to Today.
  * [date] is the day being viewed; camera shots are logged "now" when that's today.
  */
 @Composable
-fun CameraScreen(date: String, onDone: () -> Unit) {
+fun CameraScreen(date: String, onDone: () -> Unit, onBarcode: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
     val repo = LocalRepo.current
     val ctx = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
@@ -130,7 +132,10 @@ fun CameraScreen(date: String, onDone: () -> Unit) {
             Box(Modifier.size(84.dp).clip(CircleShape).border(5.dp, Color.White, CircleShape).padding(9.dp)
                 .clip(CircleShape).background(if (capturing) Color.White.copy(alpha = 0.5f) else Color.White)
                 .clickable(enabled = granted && !capturing) { shoot() })
-            Spacer(Modifier.size(56.dp))
+            // packaged food: scan its barcode instead of photographing it
+            Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.18f))
+                .clickable { scope.launch { scanBarcode(ctx)?.let(onBarcode) } },
+                contentAlignment = Alignment.Center) { Text("▥", color = Color.White, fontSize = 26.sp) }
         }
         if (!granted && !denied) Text("Allow camera access to snap meals", Modifier.align(Alignment.Center), color = Color.White)
     }

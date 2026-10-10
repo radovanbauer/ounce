@@ -18,6 +18,10 @@ import com.radovanbauer.ounce.ai.Ai
 import com.radovanbauer.ounce.data.AppDb
 import com.radovanbauer.ounce.data.Repo
 import com.radovanbauer.ounce.data.Settings
+import com.radovanbauer.ounce.widget.OunceWidget
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 
 class OunceApp : Application() {
     lateinit var repo: Repo
@@ -26,7 +30,22 @@ class OunceApp : Application() {
     override fun onCreate() {
         super.onCreate()
         val settings = Settings(this)
-        repo = Repo(this, AppDb.create(this), settings, Ai(settings))
+        val db = AppDb.create(this)
+        repo = Repo(this, db, settings, Ai(settings))
+        watchForWidget(db, settings)
+    }
+
+    /** Refresh the home-screen widget shortly after the food log or the goals change. */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private fun watchForWidget(db: AppDb, settings: Settings) {
+        val changes = kotlinx.coroutines.flow.MutableStateFlow(0)
+        db.invalidationTracker.addObserver(object : androidx.room.InvalidationTracker.Observer(arrayOf("meals", "meal_items")) {
+            override fun onInvalidated(tables: Set<String>) { changes.value++ }
+        })
+        settings.onGoalsChanged = { changes.value++ }
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            changes.drop(1).debounce(800).collect { runCatching { OunceWidget.refresh(this@OunceApp) } }
+        }
     }
 }
 
@@ -44,14 +63,17 @@ val LocalRepo = staticCompositionLocalOf<Repo> { error("no repo") }
 /** Launcher shortcuts (res/xml/shortcuts.xml) jump straight into the two main flows. */
 const val ACTION_SNAP = "com.radovanbauer.ounce.SNAP"
 const val ACTION_TYPE = "com.radovanbauer.ounce.TYPE"
+/** Look up a barcode without scanning (extra "code"); handy for other apps and for testing. */
+const val ACTION_BARCODE = "com.radovanbauer.ounce.BARCODE"
 
 class MainActivity : ComponentActivity() {
     private var launchAction by mutableStateOf<String?>(null)
+    private var launchCode by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) launchAction = intent?.action
+        if (savedInstanceState == null) { launchAction = intent?.action; launchCode = intent?.getStringExtra("code") }
         val repo = (application as OunceApp).repo
         setContent {
             val ctx = LocalContext.current
@@ -59,7 +81,7 @@ class MainActivity : ComponentActivity() {
             val colors = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
             MaterialTheme(colorScheme = colors) {
                 CompositionLocalProvider(LocalRepo provides repo) {
-                    AppRoot(launchAction) { launchAction = null }
+                    AppRoot(launchAction, launchCode) { launchAction = null; launchCode = null }
                 }
             }
         }
@@ -68,13 +90,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         launchAction = intent.action
+        launchCode = intent.getStringExtra("code")
     }
 }
 
 @Composable
-fun AppRoot(launchAction: String?, onLaunchHandled: () -> Unit) {
+fun AppRoot(launchAction: String?, launchCode: String?, onLaunchHandled: () -> Unit) {
     var stack by remember { mutableStateOf(listOf<Screen>(Screen.Day())) }
     var focusComposer by remember { mutableStateOf(false) }
+    var scannedCode by remember { mutableStateOf<String?>(null) }  // barcode to look up and log on Today
     val push = { s: Screen -> stack = stack + s }
     val pop = { if (stack.size > 1) stack = stack.dropLast(1) }
     val switchTab = { s: Screen -> stack = listOf(s) }
@@ -85,12 +109,13 @@ fun AppRoot(launchAction: String?, onLaunchHandled: () -> Unit) {
         when (launchAction) {
             ACTION_SNAP -> stack = listOf(Screen.Day(), Screen.Camera(Repo.today()))
             ACTION_TYPE -> { stack = listOf(Screen.Day()); focusComposer = true }
+            ACTION_BARCODE -> if (launchCode != null) { stack = listOf(Screen.Day()); scannedCode = launchCode }
         }
         if (launchAction != null) onLaunchHandled()
     }
 
     if (top is Screen.Camera) {
-        CameraScreen(top.date, onDone = pop)
+        CameraScreen(top.date, onDone = pop, onBarcode = { code -> pop(); scannedCode = code })
         return
     }
     Scaffold(
@@ -111,6 +136,8 @@ fun AppRoot(launchAction: String?, onLaunchHandled: () -> Unit) {
         Box(Modifier.padding(pad).consumeWindowInsets(pad)) {
             when (top) {
                 is Screen.Day -> TodayScreen(top.date, focusComposer, onComposerFocused = { focusComposer = false },
+                    scannedCode = scannedCode, onScannedHandled = { scannedCode = null },
+                    onTypeInstead = { scannedCode = null; focusComposer = true },
                     onOpenMeal = { push(Screen.MealDetail(it)) },
                     onOpenCamera = { push(Screen.Camera(it)) },
                     onDateChange = { stack = stack.dropLast(1) + Screen.Day(it) })

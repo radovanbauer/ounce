@@ -103,6 +103,14 @@ interface MealDao {
         insertItems(items.mapIndexed { i, it -> it.copy(id = 0, mealId = mealId, position = i) })
     }
 
+    @Transaction
+    @Query("SELECT * FROM meals ORDER BY date, time, id")
+    suspend fun allMeals(): List<MealWithItems>
+
+    @Query("""SELECT m.date AS date, SUM(i.kcal) AS kcal, SUM(i.protein) AS protein, SUM(i.carbs) AS carbs, SUM(i.fat) AS fat
+              FROM meals m JOIN meal_items i ON i.mealId = m.id WHERE m.date = :date GROUP BY m.date""")
+    suspend fun totalsOn(date: String): DayTotal?
+
     @Query("SELECT text FROM meal_chat WHERE mealId = :mealId AND fromUser = 1 ORDER BY id LIMIT 1")
     suspend fun firstUserLine(mealId: Long): String?
 
@@ -126,6 +134,9 @@ interface WeightDao {
 
     @Query("SELECT * FROM weights WHERE date = :date")
     fun on(date: String): Flow<WeightEntry?>
+
+    @Query("SELECT * FROM weights ORDER BY date")
+    suspend fun all(): List<WeightEntry>
 
     @Upsert suspend fun upsert(w: WeightEntry)
 

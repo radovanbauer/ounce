@@ -15,6 +15,8 @@ import com.radovanbauer.ounce.ai.GeminiEngine
 import com.radovanbauer.ounce.ai.NanoEngine
 import com.radovanbauer.ounce.data.Goals
 import com.radovanbauer.ounce.data.Settings
+import com.radovanbauer.ounce.data.exportCsv
+import com.radovanbauer.ounce.data.exportTables
 import kotlinx.coroutines.launch
 
 @Composable
@@ -141,6 +143,9 @@ fun SettingsScreen() {
             }
         }
 
+        // ------------------------------------------------------------------ export
+        ExportCard()
+
         // ------------------------------------------------------------------ data
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -152,6 +157,96 @@ fun SettingsScreen() {
                 Text("Nutrition data: USDA FoodData Central. Estimates are approximate.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+/** CSV export via the share sheet, and a Google Sheets copy that is updated in place on each sync. */
+@Composable
+private fun ExportCard() {
+    val repo = LocalRepo.current
+    val s = repo.settings
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun syncWith(token: String?) {
+        if (token == null) { status = "Google didn't return access. Try again."; busy = false; return }
+        scope.launch {
+            status = try {
+                val r = com.radovanbauer.ounce.data.SheetsExport.sync(token, s.sheetId, repo.exportTables())
+                s.updateSheet(r.spreadsheetId)
+                "Synced ✓"
+            } catch (e: Exception) { e.message }
+            busy = false
+        }
+    }
+    val consent = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        try {
+            syncWith(com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(ctx)
+                .getAuthorizationResultFromIntent(res.data).accessToken)
+        } catch (e: Exception) { status = "Google access wasn't granted."; busy = false }
+    }
+    fun startSheetsSync() {
+        busy = true; status = "Connecting to Google…"
+        val request = com.google.android.gms.auth.api.identity.AuthorizationRequest.builder()
+            // drive.file: only spreadsheets this app creates, nothing else in the user's Drive
+            .setRequestedScopes(listOf(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.file")))
+            .build()
+        com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(ctx).authorize(request)
+            .addOnSuccessListener { r ->
+                val pending = r.pendingIntent
+                if (r.hasResolution() && pending != null)
+                    consent.launch(androidx.activity.result.IntentSenderRequest.Builder(pending.intentSender).build())
+                else syncWith(r.accessToken)
+            }
+            .addOnFailureListener { e ->
+                busy = false
+                val code = (e as? com.google.android.gms.common.api.ApiException)?.statusCode
+                status = if (code == 10) "Google Sheets isn't set up for this build yet (missing OAuth client for this app's signing key)."
+                         else "Couldn't connect to Google: ${e.message}"
+            }
+    }
+
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionTitle("Export")
+            Text("Your whole log as three tables: daily totals, every food item, and weights.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(enabled = !busy, onClick = {
+                    scope.launch {
+                        try {
+                            val uris = ArrayList(repo.exportCsv(ctx).map {
+                                androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", it)
+                            })
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).apply {
+                                type = "text/csv"
+                                putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(android.content.Intent.createChooser(send, "Export CSV"))
+                        } catch (e: Exception) { status = "Export failed: ${e.message}" }
+                    }
+                }) { Text("Share CSV") }
+                Button(enabled = !busy, onClick = { startSheetsSync() }) {
+                    Text(if (s.sheetId == null) "Export to Google Sheets" else "Sync to Google Sheets")
+                }
+            }
+            s.sheetId?.let { id ->
+                val at = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+                    .format(java.util.Date(s.sheetSyncedAt))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Last synced $at", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = {
+                        ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://docs.google.com/spreadsheets/d/$id/edit")))
+                    }) { Text("Open sheet") }
+                }
+            }
+            status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

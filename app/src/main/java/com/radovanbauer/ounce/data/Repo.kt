@@ -73,6 +73,17 @@ class Repo(private val ctx: Context, val db: AppDb, val settings: Settings, val 
         analyzeText(id, text, date)
     }
 
+    /** Log a scanned product as its own meal. */
+    fun logProduct(product: Product, grams: Double, date: String, time: String) = scope.launch {
+        val item = product.item(grams)
+        val id = meals.insert(Meal(date = date, time = time, mealType = mealTypeFor(time), title = product.name,
+            source = "barcode", estimatedBy = "Open Food Facts"))
+        meals.replaceItems(id, listOf(item))
+        events.trySend(LogEvent(id, "Logged ${product.name} · ${item.kcal.roundToInt()} kcal", undoable = true))
+    }
+
+    suspend fun addProduct(mealId: Long, product: Product, grams: Double) = addItem(mealId, product.item(grams))
+
     /** Re-run the AI for a meal whose analysis failed. */
     fun retry(mealId: Long) = scope.launch {
         val m = meals.meal(mealId).first()?.meal ?: return@launch

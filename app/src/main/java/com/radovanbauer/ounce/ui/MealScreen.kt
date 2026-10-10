@@ -162,12 +162,19 @@ fun MealScreen(id: Long, onBack: () -> Unit) {
         } else TextButton(onClick = { confirmDelete = true }) { Text("Delete meal", color = MaterialTheme.colorScheme.error) }
     }
 
+    var scanned by remember { mutableStateOf<String?>(null) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     if (adding) AddFoodDialog(
         onDismiss = { adding = false },
+        onScan = { adding = false; scope.launch { scanned = scanBarcode(ctx) } },
         onAddFood = { food, grams -> scope.launch { repo.addFood(meal.id, food, grams) }; adding = false },
         onAddCustom = { item -> scope.launch { repo.addItem(meal.id, item.copy(mealId = meal.id)) }; adding = false },
         onAddWithAi = { text -> repo.addWithAi(meal.id, text); adding = false },
     )
+    scanned?.let { code ->
+        BarcodeSheet(code, confirmLabel = "Add to meal", onDismiss = { scanned = null },
+            onConfirm = { product, grams -> scope.launch { repo.addProduct(meal.id, product, grams) }; scanned = null })
+    }
     Box(Modifier.fillMaxSize()) { SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()) }
 }
 
@@ -253,6 +260,7 @@ private fun ItemEditor(item: MealItem, onDone: () -> Unit, onSave: (MealItem) ->
 @Composable
 private fun AddFoodDialog(
     onDismiss: () -> Unit,
+    onScan: () -> Unit,
     onAddFood: (Food, Double) -> Unit,
     onAddCustom: (MealItem) -> Unit,
     onAddWithAi: (String) -> Unit,
@@ -285,6 +293,18 @@ private fun AddFoodDialog(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }))
                 LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    if (query.isBlank()) item {
+                        Row(Modifier.fillMaxWidth().clickable(onClick = onScan).padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("▥  ", fontSize = 18.sp)
+                            Column {
+                                Text("Scan a barcode", fontWeight = FontWeight.Medium)
+                                Text("Packaged food, looked up in Open Food Facts", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        HorizontalDivider()
+                    }
                     if (query.isNotBlank()) item {
                         Row(Modifier.fillMaxWidth().clickable { onAddWithAi(query.trim()) }.padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically) {

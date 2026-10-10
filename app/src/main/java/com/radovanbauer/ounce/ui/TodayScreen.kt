@@ -59,6 +59,9 @@ fun TodayScreen(
     dateArg: String?,
     focusComposer: Boolean,
     onComposerFocused: () -> Unit,
+    scannedCode: String?,
+    onScannedHandled: () -> Unit,
+    onTypeInstead: () -> Unit,
     onOpenMeal: (Long) -> Unit,
     onOpenCamera: (String) -> Unit,
     onDateChange: (String) -> Unit,
@@ -146,7 +149,7 @@ fun TodayScreen(
                 }
                 val list = meals
                 if (list != null && list.isEmpty()) item {
-                    EmptyNote("Nothing logged yet. Tap 📷 to snap your meal, or type what you ate below.")
+                    EmptyNote("Nothing logged yet. Tap 📷 to snap your meal (or scan a barcode there), or type what you ate below.")
                 }
                 items(list ?: emptyList(), key = { it.meal.id }) { m ->
                     MealCard(m, expanded = expanded == m.meal.id,
@@ -177,6 +180,11 @@ fun TodayScreen(
             )
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp).imePadding())
+    }
+
+    scannedCode?.let { code ->
+        BarcodeSheet(code, confirmLabel = "Log it", onDismiss = onScannedHandled, onTypeInstead = onTypeInstead,
+            onConfirm = { product, grams -> repo.logProduct(product, grams, date, defaultTime(date)); onScannedHandled() })
     }
 }
 

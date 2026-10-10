@@ -31,7 +31,17 @@ jobs:
             echo "::warning::SIGNING_KEYSTORE_B64 not set; using a throwaway key (won't install over previous builds)"
           fi
       - name: Build
-        run: ./gradlew --no-daemon assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ounce.apk
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon assembleDebug 2>&1 | tee build.log
+          cp app/build/outputs/apk/debug/app-debug.apk ounce.apk
+      - name: Report build errors
+        if: failure()
+        # surface compiler errors as annotations (readable on the run page and through the public API)
+        run: |
+          grep -E "^e: |error:|What went wrong|> " build.log | head -40 | while IFS= read -r line; do
+            echo "::error title=build::${line//%/%25}"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ounce-apk

@@ -34,10 +34,24 @@ class Settings(ctx: Context) {
         private set
     var apiKey by mutableStateOf(readKey())
         private set
+    /** The spreadsheet created by "Sync to Google Sheets", reused on later syncs. */
+    var sheetId by mutableStateOf(prefs.getString("sheetId", null))
+        private set
+    var sheetSyncedAt by mutableStateOf(prefs.getLong("sheetSyncedAt", 0L))
+        private set
+    /** Called when goals change, so the home-screen widget can refresh. */
+    var onGoalsChanged: () -> Unit = {}
+
+    fun updateSheet(id: String?) {
+        sheetId = id
+        sheetSyncedAt = if (id == null) 0L else System.currentTimeMillis()
+        prefs.edit().putString("sheetId", id).putLong("sheetSyncedAt", sheetSyncedAt).apply()
+    }
 
     fun updateGoals(g: Goals) {
         goals = g
         prefs.edit().putInt("kcal", g.kcal).putInt("protein", g.protein).putInt("carbs", g.carbs).putInt("fat", g.fat).apply()
+        onGoalsChanged()
     }
 
     fun updateWeightUnit(u: String) { weightUnit = u; prefs.edit().putString("unit", u).apply() }
