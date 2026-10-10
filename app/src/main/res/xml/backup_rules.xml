@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="database" path="ounce.db" />
+    <include domain="database" path="ounce.db-wal" />
+    <include domain="database" path="ounce.db-shm" />
+    <include domain="sharedpref" path="settings.xml" />
+</full-backup-content>

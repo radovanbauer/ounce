@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="snap" android:enabled="true" android:icon="@drawable/ic_shortcut_camera"
+        android:shortcutShortLabel="@string/shortcut_snap" android:shortcutLongLabel="@string/shortcut_snap_long">
+        <intent android:action="com.radovanbauer.ounce.SNAP"
+            android:targetPackage="com.radovanbauer.ounce"
+            android:targetClass="com.radovanbauer.ounce.ui.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="type" android:enabled="true" android:icon="@drawable/ic_shortcut_type"
+        android:shortcutShortLabel="@string/shortcut_type" android:shortcutLongLabel="@string/shortcut_type_long">
+        <intent android:action="com.radovanbauer.ounce.TYPE"
+            android:targetPackage="com.radovanbauer.ounce"
+            android:targetClass="com.radovanbauer.ounce.ui.MainActivity" />
+    </shortcut>
+</shortcuts>

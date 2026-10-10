@@ -1,0 +1,124 @@
+package com.radovanbauer.ounce.ui
+
+import android.app.Application
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import com.radovanbauer.ounce.ai.Ai
+import com.radovanbauer.ounce.data.AppDb
+import com.radovanbauer.ounce.data.Repo
+import com.radovanbauer.ounce.data.Settings
+
+class OunceApp : Application() {
+    lateinit var repo: Repo
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        val settings = Settings(this)
+        repo = Repo(this, AppDb.create(this), settings, Ai(settings))
+    }
+}
+
+/** Minimal back stack; the app has only a handful of screens. */
+sealed interface Screen {
+    data class Day(val date: String? = null) : Screen   // null = today
+    data class MealDetail(val id: Long) : Screen
+    data class Camera(val date: String) : Screen
+    data object Progress : Screen
+    data object SettingsScreen : Screen
+}
+
+val LocalRepo = staticCompositionLocalOf<Repo> { error("no repo") }
+
+/** Launcher shortcuts (res/xml/shortcuts.xml) jump straight into the two main flows. */
+const val ACTION_SNAP = "com.radovanbauer.ounce.SNAP"
+const val ACTION_TYPE = "com.radovanbauer.ounce.TYPE"
+
+class MainActivity : ComponentActivity() {
+    private var launchAction by mutableStateOf<String?>(null)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        if (savedInstanceState == null) launchAction = intent?.action
+        val repo = (application as OunceApp).repo
+        setContent {
+            val ctx = LocalContext.current
+            val dark = isSystemInDarkTheme()
+            val colors = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+            MaterialTheme(colorScheme = colors) {
+                CompositionLocalProvider(LocalRepo provides repo) {
+                    AppRoot(launchAction) { launchAction = null }
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        launchAction = intent.action
+    }
+}
+
+@Composable
+fun AppRoot(launchAction: String?, onLaunchHandled: () -> Unit) {
+    var stack by remember { mutableStateOf(listOf<Screen>(Screen.Day())) }
+    var focusComposer by remember { mutableStateOf(false) }
+    val push = { s: Screen -> stack = stack + s }
+    val pop = { if (stack.size > 1) stack = stack.dropLast(1) }
+    val switchTab = { s: Screen -> stack = listOf(s) }
+    val top = stack.last()
+    BackHandler(enabled = stack.size > 1) { pop() }
+
+    LaunchedEffect(launchAction) {
+        when (launchAction) {
+            ACTION_SNAP -> stack = listOf(Screen.Day(), Screen.Camera(Repo.today()))
+            ACTION_TYPE -> { stack = listOf(Screen.Day()); focusComposer = true }
+        }
+        if (launchAction != null) onLaunchHandled()
+    }
+
+    if (top is Screen.Camera) {
+        CameraScreen(top.date, onDone = pop)
+        return
+    }
+    Scaffold(
+        bottomBar = {
+            if (top !is Screen.MealDetail) NavigationBar {
+                listOf(Triple(Screen.Day(), "Today", "🍽"), Triple(Screen.Progress, "Progress", "📈"),
+                    Triple(Screen.SettingsScreen, "Settings", "⚙️")).forEach { (s, label, icon) ->
+                    NavigationBarItem(
+                        selected = top::class == s::class,
+                        onClick = { switchTab(s) },
+                        icon = { Text(icon, style = MaterialTheme.typography.titleLarge) },
+                        label = { Text(label, fontWeight = FontWeight.Medium) },
+                    )
+                }
+            }
+        },
+    ) { pad ->
+        Box(Modifier.padding(pad).consumeWindowInsets(pad)) {
+            when (top) {
+                is Screen.Day -> TodayScreen(top.date, focusComposer, onComposerFocused = { focusComposer = false },
+                    onOpenMeal = { push(Screen.MealDetail(it)) },
+                    onOpenCamera = { push(Screen.Camera(it)) },
+                    onDateChange = { stack = stack.dropLast(1) + Screen.Day(it) })
+                is Screen.MealDetail -> MealScreen(top.id, onBack = pop)
+                Screen.Progress -> ProgressScreen(onOpenDay = { push(Screen.Day(it)) })
+                Screen.SettingsScreen -> SettingsScreen()
+                is Screen.Camera -> {}
+            }
+        }
+    }
+}
