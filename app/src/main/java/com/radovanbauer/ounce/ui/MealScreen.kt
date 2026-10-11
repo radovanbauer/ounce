@@ -154,6 +154,13 @@ fun MealScreen(id: Long, onBack: () -> Unit) {
             }) { Text("Send") }
         }
 
+        if (meal.estimatedBy != null) {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            TextButton(onClick = { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse(reportUrl(meal.estimatedBy, m.sortedItems)))) }) {
+                Text("Report a problem with this estimate", style = MaterialTheme.typography.bodySmall)
+            }
+        }
         Spacer(Modifier.height(8.dp))
         if (confirmDelete) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { confirmDelete = false }) { Text("Keep") }
@@ -389,4 +396,15 @@ private fun CustomFoodDialog(initialName: String, onDismiss: () -> Unit, onAdd: 
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Back") } },
     )
+}
+
+/** Pre-filled GitHub issue for a wrong or inappropriate AI result (no photo, nothing personal beyond the foods). */
+private fun reportUrl(model: String, items: List<MealItem>): String {
+    val body = buildString {
+        append("**Model:** ").append(model).append("\n\n**What the AI returned:**\n")
+        items.forEach { append("- ").append(it.name).append(", ").append(it.grams.fmt0()).append(" g, ").append(it.kcal.fmt0()).append(" kcal\n") }
+        append("\n**What's wrong / what it should be:**\n\n")
+    }
+    fun enc(x: String) = java.net.URLEncoder.encode(x, "UTF-8")
+    return "https://github.com/radovanbauer/ounce/issues/new?labels=estimate&title=${enc("Problem with an AI estimate")}&body=${enc(body)}"
 }

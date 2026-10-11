@@ -30,11 +30,29 @@ jobs:
           else
             echo "::warning::SIGNING_KEYSTORE_B64 not set; using a throwaway key (won't install over previous builds)"
           fi
+      - name: Restore Play upload key
+        env:
+          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
+            echo "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+            echo "UPLOAD_KEYSTORE=$RUNNER_TEMP/upload.keystore" >> "$GITHUB_ENV"
+            echo "UPLOAD_KEYSTORE_PASSWORD=$UPLOAD_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          fi
       - name: Build
+        # staging = R8-shrunk release code, sideload-signed (published below); release = Play bundle
         run: |
           set -o pipefail
-          ./gradlew --no-daemon assembleDebug 2>&1 | tee build.log
-          cp app/build/outputs/apk/debug/app-debug.apk ounce.apk
+          TASKS="assembleStaging"
+          [ -n "${UPLOAD_KEYSTORE:-}" ] && TASKS="$TASKS bundleRelease"
+          ./gradlew --no-daemon $TASKS 2>&1 | tee build.log
+          cp app/build/outputs/apk/staging/app-staging.apk ounce.apk
+      - uses: actions/upload-artifact@v4
+        if: env.UPLOAD_KEYSTORE != ''
+        with:
+          name: ounce-play-bundle
+          path: app/build/outputs/bundle/release/app-release.aab
       - name: Report build errors
         if: failure()
         # surface compiler errors as annotations (readable on the run page and through the public API)

@@ -7,17 +7,17 @@ plugins {
 
 android {
     namespace = "com.radovanbauer.ounce"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.radovanbauer.ounce"
         minSdk = 31
-        targetSdk = 35
-        versionCode = 9
-        versionName = "0.6.1"
+        targetSdk = 36
+        versionCode = 10
+        versionName = "0.7.0"
     }
-    // A stable signing key (OUNCE_KEYSTORE, alias androiddebugkey / password android) so every build, local or CI,
-    // installs as an update of the previous one. Without it Gradle falls back to the machine's own debug key.
     signingConfigs {
+        // Sideload key (OUNCE_KEYSTORE, alias androiddebugkey / password android): debug and staging builds published
+        // on GitHub, so each installs as an update of the previous one. Without it Gradle uses the machine's debug key.
         System.getenv("OUNCE_KEYSTORE")?.let { path ->
             create("ounce") {
                 storeFile = file(path)
@@ -26,10 +26,34 @@ android {
                 keyPassword = "android"
             }
         }
+        // Play upload key (UPLOAD_KEYSTORE + UPLOAD_KEYSTORE_PASSWORD, alias "upload"); Google re-signs for distribution.
+        System.getenv("UPLOAD_KEYSTORE")?.let { path ->
+            create("upload") {
+                storeFile = file(path)
+                storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = "upload"
+                keyPassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
             signingConfigs.findByName("ounce")?.let { signingConfig = it }
+        }
+        // Play Store build: shrunk and optimized with R8.
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("upload")
+        }
+        // Same R8 build as release, but debuggable and signed with the sideload key: what GitHub releases ship,
+        // so the shrunk code is exercised before it reaches the Play Store.
+        create("staging") {
+            initWith(getByName("release"))
+            isDebuggable = true
+            signingConfig = signingConfigs.findByName("ounce") ?: signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
         }
     }
     buildFeatures { compose = true }

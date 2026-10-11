@@ -123,6 +123,7 @@ fun SettingsScreen() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        AboutCard()
     }
 }
 
@@ -312,3 +313,34 @@ private fun CloudAiCard() {
         }
     }
 }
+
+@Composable
+private fun AboutCard() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var licenses by remember { mutableStateOf(false) }
+    fun open(url: String) = ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    val version = remember { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            SectionTitle("About")
+            Text("Ounce $version · Estimates are approximate and not medical advice.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { open("https://ounce.radovanbauer.com/privacy") }) { Text("Privacy policy") }
+            TextButton(onClick = { open("https://github.com/radovanbauer/ounce") }) { Text("Source code (MIT)") }
+            TextButton(onClick = { open("https://github.com/radovanbauer/ounce/issues") }) { Text("Report a problem") }
+            TextButton(onClick = { licenses = !licenses }) { Text(if (licenses) "Hide licenses" else "Open-source licenses") }
+            if (licenses) Text(LICENSES, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private const val LICENSES = """Data
+• USDA FoodData Central (SR Legacy, FNDDS): public domain (CC0).
+• Open Food Facts product database: Open Database License (ODbL); contents under the Database Contents License.
+
+Libraries
+• AndroidX, Jetpack Compose, Room, CameraX, Glance, ExifInterface: Apache License 2.0, The Android Open Source Project.
+• Kotlin and kotlinx.coroutines: Apache License 2.0, JetBrains.
+• ML Kit (GenAI Prompt API, barcode scanning) and Google Play services: Google APIs Terms of Service / ML Kit Terms.
+
+Ounce itself is MIT-licensed: github.com/radovanbauer/ounce"""

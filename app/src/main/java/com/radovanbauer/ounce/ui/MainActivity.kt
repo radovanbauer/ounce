@@ -114,6 +114,16 @@ fun AppRoot(launchAction: String?, launchCode: String?, onLaunchHandled: () -> U
         if (launchAction != null) onLaunchHandled()
     }
 
+    val settings = LocalRepo.current.settings
+    if (!settings.acknowledgedDisclaimer) AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Welcome to Ounce") },
+        text = { Text("Ounce estimates calories and nutrients from photos and descriptions using AI. Estimates can be " +
+            "wrong, so check portions and correct anything that looks off.\n\nOunce is not a medical device and doesn't " +
+            "give medical or dietary advice. If you have a health condition, follow your doctor's or dietitian's guidance.") },
+        confirmButton = { TextButton(onClick = { settings.acknowledgeDisclaimer() }) { Text("Got it") } },
+    )
+
     if (top is Screen.Camera) {
         CameraScreen(top.date, onDone = pop, onBarcode = { code -> pop(); scannedCode = code })
         return

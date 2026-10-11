@@ -62,6 +62,9 @@ class Settings(ctx: Context) {
         private set
     var sheetSyncedAt by mutableStateOf(prefs.getLong("sheetSyncedAt", 0L))
         private set
+    var acknowledgedDisclaimer by mutableStateOf(prefs.getBoolean("disclaimer", false))
+        private set
+    fun acknowledgeDisclaimer() { acknowledgedDisclaimer = true; prefs.edit().putBoolean("disclaimer", true).apply() }
     /** Called when goals change, so the home-screen widget can refresh. */
     var onGoalsChanged: () -> Unit = {}
 

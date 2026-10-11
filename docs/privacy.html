@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ounce privacy policy</title><link rel="stylesheet" href="style.css"></head><body><main>
+<header><a href="./"><span class="logo"><svg width="34" height="34" viewBox="0 0 108 108" aria-hidden="true"><circle cx="54" cy="54" r="20" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="7.5"/><path d="M54 34A20 20 0 1 1 34 54" fill="none" stroke="#fff" stroke-width="7.5" stroke-linecap="round"/></svg></span><h1>Ounce</h1></a></header>
+<h1 style="font-size:1.6rem">Privacy policy</h1>
+<p class="muted">Effective October 11, 2026</p>
+<p>Ounce is a calorie and nutrition tracker for Android made by Radovan Bauer ("we"). This policy explains what happens to your data when you use it. The short version: <b>Ounce has no account and no server. We don't collect, receive or sell any of your data.</b> Data only leaves your phone when you use a feature that needs an outside service, and then it goes directly from your phone to that service.</p>
+
+<h2>Data stored on your phone</h2>
+<p>Your food log (meals, foods, portions, nutrition values, times and photos), body weight entries, goals and settings are stored only on your device. If you've turned on Android backup, your food log, weights, goals and settings are included in your device's backup to your Google account, which Google manages; meal photos and API keys are excluded. Uninstalling Ounce deletes everything stored by the app.</p>
+
+<h2>When data leaves your phone</h2>
+<ul>
+<li><b>On-device AI (default).</b> On supported phones, meals are analyzed by Gemini Nano running on your device through Android's AICore. Photos and descriptions are not sent anywhere.</li>
+<li><b>Cloud AI (optional, your own API key).</b> If you add an API key for Google Gemini, OpenAI, Anthropic (Claude) or OpenRouter, the meal photo or description you're logging, plus a correction you type, is sent from your phone directly to that provider to estimate nutrition. That provider processes it under its own terms and privacy policy and the agreement you have with them. Your API key is stored encrypted on your phone and is never included in backups.</li>
+<li><b>Barcode lookups.</b> When you scan a packaged food, the barcode number is sent to Open Food Facts (openfoodfacts.org) to look up the product. Nothing else is sent.</li>
+<li><b>Export.</b> CSV export only happens when you share the files, to the destination you choose. Google Sheets export is described below.</li>
+</ul>
+
+<h2>Google user data (Google Sheets export)</h2>
+<p>If you choose "Export to Google Sheets", Ounce asks for permission to the Google Drive scope <code>drive.file</code>, which only lets the app see and edit files it creates itself, not any other files in your Drive. Ounce uses this access solely to create a spreadsheet named "Ounce" in your Drive and to write your exported food log, daily totals and weights to it when you tap sync. The access token is used only on your device; your Google data isn't sent to us or anyone else, and isn't used for advertising or any other purpose. You can revoke access anytime at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+<p>Ounce's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>Permissions</h2>
+<ul><li><b>Camera:</b> to photograph meals and read barcodes, only while the camera screen is open.</li>
+<li><b>Internet:</b> only for the optional services above.</li></ul>
+
+<h2>What we don't do</h2>
+<p>No analytics, no ads, no tracking, no data sales. We don't operate servers that receive your data.</p>
+
+<h2>Children</h2>
+<p>Ounce isn't directed at children under 13 and isn't intended for them.</p>
+
+<h2>Health information</h2>
+<p>Nutrition estimates are approximate. Ounce is not a medical device and doesn't provide medical advice.</p>
+
+<h2>Changes and contact</h2>
+<p>If this policy changes, the new version will be posted here with a new effective date. Questions: <a href="mailto:radovan.bauer@gmail.com">radovan.bauer@gmail.com</a> or <a href="https://github.com/radovanbauer/ounce/issues">GitHub issues</a>.</p>
+<footer><a href="./">Ounce</a> · © 2026 Radovan Bauer</footer>
+</main></body></html>
