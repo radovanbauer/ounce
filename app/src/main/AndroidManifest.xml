@@ -13,6 +13,8 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- have Play services fetch the barcode model at install time, so live detection works right away -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode" />
         <activity android:name=".ui.MainActivity" android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">

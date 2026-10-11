@@ -34,7 +34,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.radovanbauer.ounce.data.OpenFoodFacts
 import com.radovanbauer.ounce.data.Repo
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.mlkit.vision.MlKitAnalyzer
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import kotlinx.coroutines.launch
 
 /**
@@ -80,16 +92,55 @@ fun CameraScreen(date: String, onDone: () -> Unit, onBarcode: (String) -> Unit) 
         }
     }
 
+    // Live barcode detection on the preview (like the stock camera's QR chips): a product barcode in view
+    // shows a chip with the product name; tapping it opens the product sheet. Nothing is logged without a tap.
+    var detected by remember { mutableStateOf<String?>(null) }
+    var lastSeen by remember { mutableLongStateOf(0L) }
+    val labels = remember { mutableStateMapOf<String, String>() }
+    val scanner = remember {
+        BarcodeScanning.getClient(BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E)
+            .build())
+    }
+    var candidate by remember { mutableStateOf<String?>(null) }
+    fun seen(code: String) {
+        if (code != candidate) { candidate = code; return } // same code in two frames in a row filters misreads
+        lastSeen = System.currentTimeMillis()
+        if (detected != code) {
+            detected = code
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        if (code !in labels) {
+            labels[code] = "Looking up…"
+            scope.launch {
+                labels[code] = try {
+                    OpenFoodFacts.lookup(code).let { p -> if (p.brand.isBlank()) p.name else "${p.name} · ${p.brand}" }
+                } catch (e: Exception) { "Barcode $code" }
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(500)
+            if (detected != null && System.currentTimeMillis() - lastSeen > 2500) detected = null
+        }
+    }
+
     val controller = remember {
         LifecycleCameraController(ctx).apply {
-            setEnabledUseCases(CameraController.IMAGE_CAPTURE)
+            setEnabledUseCases(CameraController.IMAGE_CAPTURE or CameraController.IMAGE_ANALYSIS)
             imageCaptureMode = ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
+            val main = ContextCompat.getMainExecutor(ctx)
+            setImageAnalysisAnalyzer(main, MlKitAnalyzer(listOf(scanner), ImageAnalysis.COORDINATE_SYSTEM_ORIGINAL, main) { result ->
+                result.getValue(scanner)?.firstNotNullOfOrNull { it.rawValue }?.let { seen(it) }
+            })
         }
     }
     DisposableEffect(granted) {
         if (granted) controller.bindToLifecycle(lifecycle)
         onDispose { controller.unbind() }
     }
+    DisposableEffect(Unit) { onDispose { scanner.close() } }
 
     fun shoot() {
         if (capturing) return
@@ -122,6 +173,20 @@ fun CameraScreen(date: String, onDone: () -> Unit, onBarcode: (String) -> Unit) 
             Spacer(Modifier.weight(1f))
             if (date != Repo.today()) Text("Logging to ${date}", color = Color.White, fontSize = 13.sp,
                 modifier = Modifier.padding(end = 12.dp))
+        }
+
+        val chip = detected
+        AnimatedVisibility(chip != null, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 150.dp),
+            enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut()) {
+            val code = chip ?: candidate ?: ""
+            Surface(onClick = { onBarcode(code) }, shape = RoundedCornerShape(24.dp), color = Color.White) {
+                Row(Modifier.padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("▥  ", color = Color.Black, fontSize = 18.sp)
+                    Text(labels[code] ?: "Barcode $code", color = Color.Black, fontSize = 16.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp))
+                    Text("  ›", color = Color.Black, fontSize = 20.sp)
+                }
+            }
         }
 
         Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 28.dp),
