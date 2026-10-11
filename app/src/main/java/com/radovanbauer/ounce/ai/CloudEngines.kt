@@ -2,15 +2,6 @@ package com.radovanbauer.ounce.ai
 
 import android.graphics.Bitmap
 import android.util.Base64
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
-import com.anthropic.core.JsonValue
-import com.anthropic.errors.AnthropicIoException
-import com.anthropic.errors.AnthropicServiceException
-import com.anthropic.models.messages.Base64ImageSource
-import com.anthropic.models.messages.ContentBlockParam
-import com.anthropic.models.messages.ImageBlockParam
-import com.anthropic.models.messages.MessageCreateParams
-import com.anthropic.models.messages.TextBlockParam
 import com.radovanbauer.ounce.data.Provider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -87,49 +78,35 @@ class OpenAiCompatEngine(
     }
 }
 
-/** Claude through Anthropic's official Java SDK. */
+/** Claude through the Anthropic Messages API (plain HTTP, like the other providers). */
 class AnthropicEngine(private val model: String, private val apiKey: String) : AiEngine {
     override val label = model
 
     override suspend fun generate(prompt: String, image: Bitmap?): String = withContext(Dispatchers.IO) {
-        val client = AnthropicOkHttpClient.builder().apiKey(apiKey).build()
-        try {
-            val blocks = mutableListOf<ContentBlockParam>()
-            if (image != null) blocks += ContentBlockParam.ofImage(ImageBlockParam.builder()
-                .source(Base64ImageSource.builder().data(image.jpegBase64()).mediaType(Base64ImageSource.MediaType.IMAGE_JPEG).build())
-                .build())
-            blocks += ContentBlockParam.ofText(TextBlockParam.builder().text(prompt).build())
-            val params = MessageCreateParams.builder()
-                .model(model)
-                .maxTokens(16000L)
-                .addUserMessageOfBlockParams(blocks)
-            if (model in REFUSAL_FALLBACK_MODELS) {
-                // a classifier refusal on these models is retried server-side on a suitable model
-                params.putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
-                params.putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-            }
-            val msg = client.messages().create(params.build())
-            if (msg.stopReason().map { it.asString() }.orElse("") == "refusal")
-                throw AiUnavailable("Claude declined this request. Try another photo, or describe the meal instead.")
-            msg.content().mapNotNull { block -> block.text().map { it.text() }.orElse(null) }.joinToString("")
-        } catch (e: AnthropicServiceException) {
-            throw AiUnavailable(when (e.statusCode()) {
-                401, 403 -> "Anthropic rejected the API key (${e.statusCode()}). Check it in Settings."
-                404 -> "Anthropic doesn't know the model \"$model\"."
-                429 -> "Anthropic rate limit reached. Try again shortly."
-                529 -> "Anthropic is overloaded right now. Try again shortly."
-                else -> "Anthropic error ${e.statusCode()}: ${e.message?.take(200)}"
-            })
-        } catch (e: AnthropicIoException) {
-            throw AiUnavailable("Couldn't reach Anthropic (${e.message}). Check your connection.")
-        } finally {
-            client.close()
+        val content = JSONArray()
+        if (image != null) content.put(JSONObject().put("type", "image").put("source", JSONObject()
+            .put("type", "base64").put("media_type", "image/jpeg").put("data", image.jpegBase64())))
+        content.put(JSONObject().put("type", "text").put("text", prompt))
+        val body = JSONObject().put("model", model).put("max_tokens", 16000)
+            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", content)))
+        val headers = anthropicHeaders(apiKey).toMutableMap()
+        if (model in REFUSAL_FALLBACK_MODELS) {
+            // a classifier refusal on these models is retried server-side on a suitable model
+            headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
+            body.put("fallbacks", "default")
         }
+        val res = httpJson("https://api.anthropic.com/v1/messages", "POST", headers, body, "Anthropic")
+        if (res.optString("stop_reason") == "refusal")
+            throw AiUnavailable("Claude declined this request. Try another photo, or describe the meal instead.")
+        val blocks = res.optJSONArray("content") ?: JSONArray()
+        (0 until blocks.length()).mapNotNull { blocks.optJSONObject(it) }
+            .filter { it.optString("type") == "text" }.joinToString("") { it.optString("text") }
     }
 
     companion object {
         /** Models that accept the server-side refusal fallback ("default" mode). */
         val REFUSAL_FALLBACK_MODELS = setOf("claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5")
+        fun anthropicHeaders(apiKey: String) = mapOf("x-api-key" to apiKey, "anthropic-version" to "2023-06-01")
     }
 }
 
@@ -166,12 +143,15 @@ object ModelCatalog {
                     .sortedDescending().map { ModelOption(it, it) }
             }
             Provider.ANTHROPIC -> {
-                val client = AnthropicOkHttpClient.builder().apiKey(apiKey).build()
-                try {
-                    client.models().list().autoPager().map { ModelOption(it.id(), it.displayName()) }
-                } catch (e: AnthropicServiceException) {
-                    throw AiUnavailable(if (e.statusCode() == 401) "Anthropic rejected the API key." else "Anthropic error ${e.statusCode()}")
-                } finally { client.close() }
+                val out = mutableListOf<ModelOption>()
+                var after: String? = null
+                do {
+                    val res = httpJson("https://api.anthropic.com/v1/models?limit=1000" + (after?.let { "&after_id=$it" } ?: ""),
+                        "GET", AnthropicEngine.anthropicHeaders(apiKey), null, "Anthropic")
+                    res.optJSONArray("data").objects().forEach { out += ModelOption(it.getString("id"), it.optString("display_name")) }
+                    after = if (res.optBoolean("has_more")) res.optString("last_id").ifEmpty { null } else null
+                } while (after != null)
+                out
             }
             Provider.OPENROUTER -> {
                 // public list; keep models that accept images, cheapest first within a name
