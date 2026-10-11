@@ -12,8 +12,8 @@ android {
         applicationId = "com.radovanbauer.ounce"
         minSdk = 31
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.5.0"
+        versionCode = 8
+        versionName = "0.6.0"
     }
     // A stable signing key (OUNCE_KEYSTORE, alias androiddebugkey / password android) so every build, local or CI,
     // installs as an update of the previous one. Without it Gradle falls back to the machine's own debug key.
@@ -60,6 +60,7 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.2")
     ksp("androidx.room:room-compiler:2.7.2")
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
+    implementation("com.anthropic:anthropic-java:2.71.0")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")

@@ -11,7 +11,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.mlkit.genai.common.DownloadStatus
-import com.radovanbauer.ounce.ai.GeminiEngine
+import com.radovanbauer.ounce.ai.ModelCatalog
+import com.radovanbauer.ounce.ai.ModelOption
+import com.radovanbauer.ounce.ai.cloudEngine
+import com.radovanbauer.ounce.data.Provider
 import com.radovanbauer.ounce.ai.NanoEngine
 import com.radovanbauer.ounce.data.Goals
 import com.radovanbauer.ounce.data.Settings
@@ -103,45 +106,7 @@ fun SettingsScreen() {
             }
         }
 
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Cloud AI (optional)")
-                Text("Use your own Gemini API key for noticeably better estimates. In our tests it was about twice as accurate as on-device. " +
-                    "Photos are then sent to Google. Get a key at aistudio.google.com/apikey. Free tier available; " +
-                    "otherwise about \$0.003–0.007 per photo, billed by Google to you.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                var key by remember { mutableStateOf(s.apiKey) }
-                var model by remember { mutableStateOf(s.cloudModel) }
-                var test by remember { mutableStateOf<String?>(null) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Use cloud AI", Modifier.weight(1f))
-                    Switch(s.useCloud, { s.setCloud(it, model) }, enabled = s.apiKey.isNotBlank())
-                }
-                OutlinedTextField(key, { key = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Gemini API key") },
-                    visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Model") })
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = key.trim() != s.apiKey || model.trim() != s.cloudModel, onClick = {
-                        s.updateApiKey(key)
-                        s.setCloud(s.apiKey.isNotBlank(), model) // saving a key turns cloud AI on; the switch turns it off
-                        test = null
-                    }) { Text("Save") }
-                    // tests what's typed in the fields (saved or not)
-                    OutlinedButton(enabled = key.isNotBlank(), onClick = {
-                        test = "Testing…"
-                        scope.launch {
-                            test = try {
-                                GeminiEngine(model.trim().ifEmpty { Settings.DEFAULT_MODEL }, key.trim()).generate("Reply with the word OK.")
-                                "Key works ✓"
-                            } catch (e: Exception) { e.message }
-                        }
-                    }) { Text("Test key") }
-                }
-                test?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                Text("Your key is stored encrypted on this phone and is not included in backups.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+        CloudAiCard()
 
         // ------------------------------------------------------------------ export
         ExportCard()
@@ -247,6 +212,103 @@ private fun ExportCard() {
                 }
             }
             status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+/** Bring-your-own-key cloud AI: provider, key (per provider), and a model picked from the provider's live list. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun CloudAiCard() {
+    val repo = LocalRepo.current
+    val s = repo.settings
+    val scope = rememberCoroutineScope()
+    val p = s.provider
+    var key by remember(p) { mutableStateOf(s.keyFor(p)) }
+    var model by remember(p) { mutableStateOf(s.modelFor(p)) }
+    var options by remember(p) { mutableStateOf<List<ModelOption>>(emptyList()) }
+    var loading by remember(p) { mutableStateOf(false) }
+    var status by remember(p) { mutableStateOf<String?>(null) }
+    var menu by remember { mutableStateOf(false) }
+
+    fun loadModels(k: String) {
+        if (k.isBlank() && p != Provider.OPENROUTER) return
+        loading = true
+        scope.launch {
+            try {
+                options = ModelCatalog.list(p, k.trim())
+                if (model.isBlank()) ModelCatalog.recommend(p, options)?.let { model = it }
+                status = null
+            } catch (e: Exception) { status = "Couldn't load models: ${e.message}" }
+            loading = false
+        }
+    }
+    LaunchedEffect(p) { loadModels(s.keyFor(p)) }
+
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionTitle("Cloud AI (optional)")
+            Text("Use your own API key for noticeably better estimates than on-device. Photos are then sent to the provider " +
+                "you pick, which bills your account (typically a cent or less per photo).",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Use cloud AI", Modifier.weight(1f))
+                Switch(s.useCloud, { s.setCloud(it) }, enabled = s.apiKey.isNotBlank())
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Provider.entries.forEach { prov ->
+                    FilterChip(prov == p, { s.selectProvider(prov) },
+                        label = { Text(prov.label + if (s.keyFor(prov).isNotBlank()) " ✓" else "") })
+                }
+            }
+            if (p == Provider.OPENROUTER) Text("One key for models from many companies (Mistral, Qwen, Llama, Grok, …).",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(key, { key = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text("${p.label} API key") }, supportingText = { Text("Get one at ${p.keyHint}") },
+                visualTransformation = PasswordVisualTransformation())
+            ExposedDropdownMenuBox(menu, { menu = it && options.isNotEmpty() }) {
+                OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable),
+                    singleLine = true, label = { Text("Model") },
+                    supportingText = { Text(when {
+                        loading -> "Loading models…"
+                        options.isNotEmpty() -> "${options.size} models available. Pick one or type an id."
+                        else -> "Save a key to load the list of models."
+                    }) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(menu) })
+                ExposedDropdownMenu(menu, { menu = false }, Modifier.heightIn(max = 360.dp)) {
+                    val q = model.trim().lowercase()
+                    val shown = options.filter { q.isEmpty() || q == s.modelFor(p).lowercase() || q in it.id.lowercase() || q in it.label.lowercase() }
+                    (shown.ifEmpty { options }).take(200).forEach { o ->
+                        DropdownMenuItem(
+                            text = { Column { Text(o.label.ifBlank { o.id }); if (o.label.isNotBlank() && o.label != o.id) Text(o.id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
+                            onClick = { model = o.id; menu = false })
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = key.trim() != s.keyFor(p) || model.trim() != s.modelFor(p), onClick = {
+                    val newKey = key.trim() != s.keyFor(p)
+                    s.updateKey(p, key)
+                    s.updateModel(p, model)
+                    if (s.keyFor(p).isNotBlank()) s.setCloud(true) // saving a key turns cloud AI on; the switch turns it off
+                    status = null
+                    if (newKey) loadModels(key)
+                }) { Text("Save") }
+                OutlinedButton(enabled = key.isNotBlank() && model.isNotBlank(), onClick = {
+                    status = "Testing…"
+                    scope.launch {
+                        status = try {
+                            cloudEngine(p, key.trim(), model.trim()).generate("Reply with the word OK.")
+                            "Works ✓"
+                        } catch (e: Exception) { e.message }
+                    }
+                }) { Text("Test") }
+            }
+            status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (s.useCloud && s.apiKey.isNotBlank()) Text("Meals are estimated by ${s.provider.label} · ${s.cloudModel}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Text("Keys are stored encrypted on this phone and are not included in backups.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

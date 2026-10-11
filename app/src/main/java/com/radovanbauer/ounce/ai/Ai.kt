@@ -199,7 +199,8 @@ class Ai(private val settings: Settings) {
     val nano = NanoEngine()
 
     fun engine(): AiEngine =
-        if (settings.useCloud && settings.apiKey.isNotBlank()) GeminiEngine(settings.cloudModel, settings.apiKey) else nano
+        if (settings.useCloud && settings.apiKey.isNotBlank() && settings.cloudModel.isNotBlank())
+            cloudEngine(settings.provider, settings.apiKey, settings.cloudModel) else nano
 
     suspend fun analyzePhoto(photo: Bitmap, note: String): Pair<List<ItemDraft>, String> = run(Prompts.photo(note), photo)
     suspend fun analyzeText(description: String): Pair<List<ItemDraft>, String> = run(Prompts.text(description), null)

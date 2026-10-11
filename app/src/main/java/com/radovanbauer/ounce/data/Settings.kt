@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.security.KeyStore
@@ -15,9 +16,19 @@ import javax.crypto.spec.GCMParameterSpec
 
 data class Goals(val kcal: Int = 2000, val protein: Int = 150, val carbs: Int = 200, val fat: Int = 65)
 
+/** Cloud AI providers usable with the user's own API key. */
+enum class Provider(val id: String, val label: String, val defaultModel: String, val keyHint: String) {
+    GEMINI("gemini", "Gemini", "gemini-3.8-flash", "aistudio.google.com/apikey"),
+    OPENAI("openai", "OpenAI", "", "platform.openai.com/api-keys"),
+    ANTHROPIC("anthropic", "Claude", "claude-opus-5-5", "console.anthropic.com/settings/keys"),
+    OPENROUTER("openrouter", "OpenRouter", "", "openrouter.ai/keys");
+
+    companion object { fun of(id: String?) = entries.firstOrNull { it.id == id } ?: GEMINI }
+}
+
 /**
- * User preferences ("settings.xml", included in Android backup) plus the API key ("secure.xml",
- * encrypted with an Android Keystore key and excluded from backup — Keystore keys can't be restored anyway).
+ * User preferences ("settings.xml", included in Android backup) plus one API key per cloud provider ("secure.xml",
+ * encrypted with an Android Keystore key and excluded from backup; Keystore keys can't be restored anyway).
  */
 class Settings(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -30,10 +41,22 @@ class Settings(ctx: Context) {
         private set
     var useCloud by mutableStateOf(prefs.getBoolean("useCloud", false))
         private set
-    var cloudModel by mutableStateOf(prefs.getString("cloudModel", DEFAULT_MODEL) ?: DEFAULT_MODEL)
+    var provider by mutableStateOf(Provider.of(prefs.getString("provider", null)))
         private set
-    var apiKey by mutableStateOf(readKey())
-        private set
+    private val keys = mutableStateMapOf<Provider, String>().apply { Provider.entries.forEach { put(it, readKey(it)) } }
+    private val models = mutableStateMapOf<Provider, String>().apply {
+        Provider.entries.forEach { p ->
+            // "cloudModel" is where versions before multi-provider support kept the Gemini model
+            val legacy = if (p == Provider.GEMINI) prefs.getString("cloudModel", null) else null
+            put(p, prefs.getString("model_${p.id}", null) ?: legacy ?: p.defaultModel)
+        }
+    }
+
+    fun keyFor(p: Provider): String = keys[p].orEmpty()
+    fun modelFor(p: Provider): String = models[p].orEmpty()
+    /** Key and model of the currently selected provider. */
+    val apiKey: String get() = keyFor(provider)
+    val cloudModel: String get() = modelFor(provider)
     /** The spreadsheet created by "Sync to Google Sheets", reused on later syncs. */
     var sheetId by mutableStateOf(prefs.getString("sheetId", null))
         private set
@@ -56,26 +79,39 @@ class Settings(ctx: Context) {
 
     fun updateWeightUnit(u: String) { weightUnit = u; prefs.edit().putString("unit", u).apply() }
 
-    fun setCloud(enabled: Boolean, model: String = cloudModel) {
+    fun setCloud(enabled: Boolean) {
         useCloud = enabled
-        cloudModel = model.trim().ifEmpty { DEFAULT_MODEL }
-        prefs.edit().putBoolean("useCloud", enabled).putString("cloudModel", cloudModel).apply()
+        prefs.edit().putBoolean("useCloud", enabled).apply()
     }
 
-    fun updateApiKey(key: String) {
-        apiKey = key.trim()
-        if (apiKey.isEmpty()) secure.edit().clear().apply()
-        else {
+    fun selectProvider(p: Provider) {
+        provider = p
+        prefs.edit().putString("provider", p.id).apply()
+    }
+
+    fun updateModel(p: Provider, model: String) {
+        models[p] = model.trim()
+        prefs.edit().putString("model_${p.id}", model.trim()).apply()
+    }
+
+    fun updateKey(p: Provider, key: String) {
+        val k = key.trim()
+        keys[p] = k
+        val e = secure.edit().remove("iv_${p.id}").remove("key_${p.id}")
+        if (p == Provider.GEMINI) e.remove("iv").remove("key") // legacy single-key slot
+        if (k.isNotEmpty()) {
             val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, keystoreKey()) }
-            val enc = c.doFinal(apiKey.toByteArray())
-            secure.edit().putString("iv", Base64.encodeToString(c.iv, Base64.NO_WRAP))
-                .putString("key", Base64.encodeToString(enc, Base64.NO_WRAP)).apply()
+            val enc = c.doFinal(k.toByteArray())
+            e.putString("iv_${p.id}", Base64.encodeToString(c.iv, Base64.NO_WRAP))
+                .putString("key_${p.id}", Base64.encodeToString(enc, Base64.NO_WRAP))
         }
+        e.apply()
     }
 
-    private fun readKey(): String = try {
-        val iv = secure.getString("iv", null)
-        val enc = secure.getString("key", null)
+    private fun readKey(p: Provider): String = try {
+        // the Gemini key may still sit in the single-key slot used before multi-provider support
+        val iv = secure.getString("iv_${p.id}", null) ?: if (p == Provider.GEMINI) secure.getString("iv", null) else null
+        val enc = secure.getString("key_${p.id}", null) ?: if (p == Provider.GEMINI) secure.getString("key", null) else null
         if (iv == null || enc == null) "" else {
             val c = Cipher.getInstance("AES/GCM/NoPadding")
             c.init(Cipher.DECRYPT_MODE, keystoreKey(), GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
@@ -97,7 +133,6 @@ class Settings(ctx: Context) {
     }
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-3.8-flash"
         private const val ALIAS = "ounce-api-key"
         const val LB_PER_KG = 2.2046226218
     }
