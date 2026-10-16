@@ -92,7 +92,7 @@ private fun Welcome(onNext: () -> Unit) {
             "doesn't give medical or dietary advice.",
             Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
     }
-    Spacer(Modifier.weight(1f, fill = false))
+    Spacer(Modifier.height(8.dp))
     BigButton("Get started", onNext)
 }
 
