@@ -57,7 +57,7 @@ jobs:
         if: failure()
         # surface compiler errors as annotations (readable on the run page and through the public API)
         run: |
-          { grep -E "^e: |ERROR|Missing class|error:" build.log; grep -A4 "What went wrong" build.log; } | head -9 | while IFS= read -r line; do
+          { grep -iE "^e: | error: |missing class|lint found|failed" build.log; grep -A4 "What went wrong" build.log; } | head -9 | while IFS= read -r line; do
             echo "::error title=build::${line//%/%25}"
           done
       - uses: actions/upload-artifact@v4
