@@ -23,7 +23,7 @@ import com.radovanbauer.ounce.data.exportTables
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onGeminiSetup: () -> Unit = {}) {
     val repo = LocalRepo.current
     val s = repo.settings
     val scope = rememberCoroutineScope()
@@ -106,7 +106,7 @@ fun SettingsScreen() {
             }
         }
 
-        CloudAiCard()
+        CloudAiCard(onGeminiSetup)
 
         // ------------------------------------------------------------------ export
         ExportCard()
@@ -220,7 +220,7 @@ private fun ExportCard() {
 /** Bring-your-own-key cloud AI: provider, key (per provider), and a model picked from the provider's live list. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun CloudAiCard() {
+private fun CloudAiCard(onGeminiSetup: () -> Unit) {
     val repo = LocalRepo.current
     val s = repo.settings
     val scope = rememberCoroutineScope()
@@ -252,6 +252,9 @@ private fun CloudAiCard() {
             Text("Use your own API key for noticeably better estimates than on-device. Photos are then sent to the provider " +
                 "you pick, which bills your account (typically a cent or less per photo).",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (s.keyFor(Provider.GEMINI).isBlank()) Button(onClick = onGeminiSetup, modifier = Modifier.fillMaxWidth()) {
+                Text("Set up free Google Gemini (1 minute)")
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Use cloud AI", Modifier.weight(1f))
                 Switch(s.useCloud, { s.setCloud(it) }, enabled = s.apiKey.isNotBlank())

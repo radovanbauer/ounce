@@ -12,8 +12,8 @@ android {
         applicationId = "com.radovanbauer.ounce"
         minSdk = 31
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.7.0"
+        versionCode = 11
+        versionName = "0.8.0"
     }
     signingConfigs {
         // Sideload key (OUNCE_KEYSTORE, alias androiddebugkey / password android): debug and staging builds published

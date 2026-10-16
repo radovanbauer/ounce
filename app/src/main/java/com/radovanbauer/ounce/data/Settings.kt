@@ -65,6 +65,14 @@ class Settings(ctx: Context) {
     var acknowledgedDisclaimer by mutableStateOf(prefs.getBoolean("disclaimer", false))
         private set
     fun acknowledgeDisclaimer() { acknowledgedDisclaimer = true; prefs.edit().putBoolean("disclaimer", true).apply() }
+    /** First-run setup finished. Installs from before onboarding existed (disclaimer seen or a key saved) skip it. */
+    var onboarded by mutableStateOf(prefs.getBoolean("onboarded",
+        prefs.getBoolean("disclaimer", false) || Provider.entries.any { keyFor(it).isNotBlank() }))
+        private set
+    fun finishOnboarding() {
+        onboarded = true; acknowledgedDisclaimer = true
+        prefs.edit().putBoolean("onboarded", true).putBoolean("disclaimer", true).apply()
+    }
     /** Called when goals change, so the home-screen widget can refresh. */
     var onGoalsChanged: () -> Unit = {}
 

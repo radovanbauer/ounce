@@ -56,6 +56,7 @@ sealed interface Screen {
     data class Camera(val date: String) : Screen
     data object Progress : Screen
     data object SettingsScreen : Screen
+    data object GeminiSetup : Screen
 }
 
 val LocalRepo = staticCompositionLocalOf<Repo> { error("no repo") }
@@ -115,14 +116,14 @@ fun AppRoot(launchAction: String?, launchCode: String?, onLaunchHandled: () -> U
     }
 
     val settings = LocalRepo.current.settings
-    if (!settings.acknowledgedDisclaimer) AlertDialog(
-        onDismissRequest = {},
-        title = { Text("Welcome to Ounce") },
-        text = { Text("Ounce estimates calories and nutrients from photos and descriptions using AI. Estimates can be " +
-            "wrong, so check portions and correct anything that looks off.\n\nOunce is not a medical device and doesn't " +
-            "give medical or dietary advice. If you have a health condition, follow your doctor's or dietitian's guidance.") },
-        confirmButton = { TextButton(onClick = { settings.acknowledgeDisclaimer() }) { Text("Got it") } },
-    )
+    if (!settings.onboarded) {
+        Onboarding(onDone = { settings.finishOnboarding() })
+        return
+    }
+    if (top is Screen.GeminiSetup) {
+        Onboarding(onDone = pop, startAtGemini = true)
+        return
+    }
 
     if (top is Screen.Camera) {
         CameraScreen(top.date, onDone = pop, onBarcode = { code -> pop(); scannedCode = code })
@@ -153,8 +154,8 @@ fun AppRoot(launchAction: String?, launchCode: String?, onLaunchHandled: () -> U
                     onDateChange = { stack = stack.dropLast(1) + Screen.Day(it) })
                 is Screen.MealDetail -> MealScreen(top.id, onBack = pop)
                 Screen.Progress -> ProgressScreen(onOpenDay = { push(Screen.Day(it)) })
-                Screen.SettingsScreen -> SettingsScreen()
-                is Screen.Camera -> {}
+                Screen.SettingsScreen -> SettingsScreen(onGeminiSetup = { push(Screen.GeminiSetup) })
+                is Screen.Camera, Screen.GeminiSetup -> {}
             }
         }
     }
