@@ -57,9 +57,8 @@ jobs:
         if: failure()
         # surface compiler errors as annotations (readable on the run page and through the public API)
         run: |
-          { grep -E "^e: |^w: .*error" build.log; grep -iE " error: |missing class|lint found" build.log; grep -A4 "What went wrong" build.log; } | head -9 | while IFS= read -r line; do
-            echo "::error title=build::${line//%/%25}"
-          done
+          msg=$( { grep -E "^e: " build.log || true; grep -B2 -A6 "What went wrong" build.log | head -30 || true; } | head -40 | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::error title=build::$msg"
       - uses: actions/upload-artifact@v4
         with:
           name: ounce-apk
