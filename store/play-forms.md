@@ -30,3 +30,9 @@
 
 ## Government / financial / news / COVID declarations
 - Not applicable.
+
+## Play App Signing
+- App signing key SHA-1: `2C:E6:30:A5:1C:FD:F5:9A:64:14:F1:4A:46:27:BA:A2:E5:FF:39:B7`
+- App signing key SHA-256: `83:CF:73:77:29:89:46:38:CD:26:67:A7:3C:EF:F5:78:B9:89:AD:9C:BE:06:6A:F2:CE:9B:BC:41:97:CD:48:79`
+- Play-installed builds are signed with this key, so Google Sign-In (Sheets export) needs an Android OAuth
+  client with this SHA-1 and package `com.radovanbauer.ounce`.
