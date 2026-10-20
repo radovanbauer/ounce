@@ -20,7 +20,7 @@ LOG IN SECONDS
 • Home-screen widget with calories left, plus shortcuts to snap or type.
 
 SHARPER ESTIMATES WITH YOUR OWN AI KEY (OPTIONAL)
-Use your own API key for Google Gemini, OpenAI, Claude or OpenRouter. Pick any model from the provider's live list. You pay the provider directly, typically a fraction of a cent per meal.
+Ounce walks you through getting a free Google Gemini API key in about a minute (18+). You can also use your own key for OpenAI, Claude or OpenRouter and pick any model from the provider's live list. Paid keys are billed by the provider directly, typically a fraction of a cent per meal.
 
 TRACK PROGRESS
 • Daily calorie and macro goals
