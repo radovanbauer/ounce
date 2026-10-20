@@ -48,6 +48,7 @@ jobs:
           [ -n "${UPLOAD_KEYSTORE:-}" ] && TASKS="$TASKS bundleRelease"
           ./gradlew --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" $TASKS 2>&1 | tee build.log
           cp app/build/outputs/apk/staging/app-staging.apk ounce.apk
+          if [ -f app/build/outputs/bundle/release/app-release.aab ]; then cp app/build/outputs/bundle/release/app-release.aab ounce-play.aab; fi
       - uses: actions/upload-artifact@v4
         if: env.UPLOAD_KEYSTORE != ''
         with:
@@ -70,5 +71,9 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: Ounce build ${{ github.run_number }}
           body: "Debug build of ${{ github.sha }}. Sideload ounce.apk on Android 12+."
-          files: ounce.apk
+          # ounce-play.aab is signed with the Play upload key, for uploading in Play Console
+          files: |
+            ounce.apk
+            ounce-play.aab
+          fail_on_unmatched_files: false
           make_latest: true
