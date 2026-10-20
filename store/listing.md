@@ -34,4 +34,4 @@ Ounce is free and open source (MIT): github.com/radovanbauer/ounce
 Calorie estimates from photos are approximate. Ounce is not a medical device and doesn't provide medical advice.
 
 **Category:** Health & Fitness · **Tags:** calorie counter, food diary, macro tracker
-**Contact email:** radovan.bauer@gmail.com · **Website:** https://ounce.radovanbauer.com · **Privacy policy:** https://ounce.radovanbauer.com/privacy
+**Contact email:** ounce@radovanbauer.com · **Website:** https://ounce.radovanbauer.com · **Privacy policy:** https://ounce.radovanbauer.com/privacy
