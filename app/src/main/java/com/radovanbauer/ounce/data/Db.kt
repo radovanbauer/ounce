@@ -111,6 +111,10 @@ interface MealDao {
               FROM meals m JOIN meal_items i ON i.mealId = m.id WHERE m.date = :date GROUP BY m.date""")
     suspend fun totalsOn(date: String): DayTotal?
 
+    @Query("""SELECT m.date AS date, SUM(i.kcal) AS kcal, SUM(i.protein) AS protein, SUM(i.carbs) AS carbs, SUM(i.fat) AS fat
+              FROM meals m JOIN meal_items i ON i.mealId = m.id WHERE m.date = :date GROUP BY m.date""")
+    fun totalsOnFlow(date: String): Flow<DayTotal?>
+
     @Query("SELECT text FROM meal_chat WHERE mealId = :mealId AND fromUser = 1 ORDER BY id LIMIT 1")
     suspend fun firstUserLine(mealId: Long): String?
 

@@ -27,6 +27,10 @@
         <receiver android:name=".widget.OunceWidgetReceiver" android:exported="true" android:label="Ounce">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- new day / clock changes: show the right day's total (NEW_DAY is our own midnight alarm) -->
+                <action android:name="com.radovanbauer.ounce.widget.NEW_DAY" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/ounce_widget_info" />
         </receiver>

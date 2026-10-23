@@ -1,5 +1,7 @@
 package com.radovanbauer.ounce.widget
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -8,6 +10,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -27,21 +32,40 @@ import androidx.glance.layout.padding
 import com.radovanbauer.ounce.data.Repo
 import com.radovanbauer.ounce.ui.MainActivity
 import com.radovanbauer.ounce.ui.OunceApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import java.time.Duration
+import java.time.ZonedDateTime
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Home-screen widget: just the calorie ring from the Today screen. Tapping it opens the app. */
+/**
+ * Home-screen widget: just the calorie ring from the Today screen. Tapping it opens the app.
+ *
+ * Glance calls [provideGlance] once per session and keeps the session alive for a while, so updates that arrive
+ * during a session only recompose [provideContent]. The numbers are therefore read inside the composition, from
+ * flows, rather than once up front (which made the widget show stale totals after quick successive changes).
+ */
 class OunceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = (context.applicationContext as OunceApp).repo
-        val eaten = repo.meals.totalsOn(Repo.today())?.kcal ?: 0.0
-        val goal = repo.settings.goals.kcal
-        val left = (goal - eaten).roundToInt()
-        val ring = drawRing(context, eaten, goal)
+        val firstDay = Repo.today()
+        val firstEaten = repo.meals.totalsOn(firstDay)?.kcal ?: 0.0
+        scheduleNewDayUpdate(context)
         val open = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         provideContent {
+            val day by remember { dayFlow() }.collectAsState(firstDay)
+            val eaten by remember(day) { repo.meals.totalsOnFlow(day).map { it?.kcal ?: 0.0 } }
+                .collectAsState(if (day == firstDay) firstEaten else 0.0)
+            val goal = repo.settings.goals.kcal
+            val left = (goal - eaten).roundToInt()
+            val ring = remember(eaten, goal) { drawRing(context, eaten, goal) }
             Box(GlanceModifier.fillMaxSize().padding(4.dp).clickable(actionStartActivity(open)),
                 contentAlignment = Alignment.Center) {
                 Image(ImageProvider(ring),
@@ -52,12 +76,50 @@ class OunceWidget : GlanceAppWidget() {
     }
 
     companion object {
+        const val ACTION_NEW_DAY = "com.radovanbauer.ounce.widget.NEW_DAY"
+
         suspend fun refresh(context: Context) = OunceWidget().updateAll(context)
+
+        /** Today's date, re-emitted just after each midnight while a session is open. */
+        private fun dayFlow() = flow {
+            while (true) {
+                emit(Repo.today())
+                delay(millisToMidnight() + 1_000)
+            }
+        }
+
+        private fun millisToMidnight(): Long {
+            val now = ZonedDateTime.now()
+            return Duration.between(now, now.toLocalDate().plusDays(1).atStartOfDay(now.zone)).toMillis()
+        }
+
+        /**
+         * Wake the widget shortly after midnight so it doesn't keep showing yesterday's total. Inexact and
+         * non-waking: it's delivered the next time the phone is awake, which is when the widget can be seen.
+         */
+        private fun scheduleNewDayUpdate(context: Context) {
+            val intent = Intent(context, OunceWidgetReceiver::class.java).setAction(ACTION_NEW_DAY)
+            val pi = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            context.getSystemService(AlarmManager::class.java)
+                .set(AlarmManager.RTC, System.currentTimeMillis() + millisToMidnight() + 5_000, pi)
+        }
     }
 }
 
 class OunceWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = OunceWidget()
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        when (intent.action) {
+            OunceWidget.ACTION_NEW_DAY, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.Default).launch {
+                    try { runCatching { OunceWidget.refresh(context) } } finally { pending.finish() }
+                }
+            }
+        }
+    }
 }
 
 /**
