@@ -94,14 +94,14 @@ class OunceWidget : GlanceAppWidget() {
         }
 
         /**
-         * Wake the widget shortly after midnight so it doesn't keep showing yesterday's total. Inexact and
-         * non-waking: it's delivered the next time the phone is awake, which is when the widget can be seen.
+         * Wake the widget within 15 minutes after midnight so it doesn't keep showing yesterday's total. Inexact
+         * (no exact-alarm permission needed) and non-waking: it's delivered the next time the phone is awake, which is when the widget can be seen.
          */
         private fun scheduleNewDayUpdate(context: Context) {
             val intent = Intent(context, OunceWidgetReceiver::class.java).setAction(ACTION_NEW_DAY)
             val pi = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             context.getSystemService(AlarmManager::class.java)
-                .set(AlarmManager.RTC, System.currentTimeMillis() + millisToMidnight() + 5_000, pi)
+                .setWindow(AlarmManager.RTC, System.currentTimeMillis() + millisToMidnight() + 5_000, 15 * 60_000L, pi)
         }
     }
 }
