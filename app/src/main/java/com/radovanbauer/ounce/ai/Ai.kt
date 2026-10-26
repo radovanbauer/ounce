@@ -11,8 +11,10 @@ import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 import com.google.mlkit.genai.prompt.generationConfig
 import com.radovanbauer.ounce.data.MealItem
+import com.radovanbauer.ounce.data.Provider
 import com.radovanbauer.ounce.data.Settings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -152,8 +154,14 @@ class NanoEngine : AiEngine {
 }
 
 /** Cloud Gemini with the user's own API key. */
+/**
+ * Gemini over its REST API. Free-tier keys often get "503 model overloaded" (and per-model 429 quotas) on the newest
+ * model, so a busy model is retried once and then the call falls back to older Flash models, then Flash-Lite.
+ * [label] names the model that actually answered.
+ */
 class GeminiEngine(private val model: String, private val apiKey: String) : AiEngine {
-    override val label = model
+    override var label = model
+        private set
 
     override suspend fun generate(prompt: String, image: Bitmap?): String = withContext(Dispatchers.IO) {
         val parts = JSONArray()
@@ -165,6 +173,41 @@ class GeminiEngine(private val model: String, private val apiKey: String) : AiEn
         parts.put(JSONObject().put("text", prompt))
         val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("parts", parts)))
             .put("generationConfig", JSONObject().put("temperature", 0.2))
+            .toString()
+
+        var busy: Busy = try {
+            return@withContext call(model, body).also { label = model }
+        } catch (e: Busy) { e }
+        delay(2_000)
+        try {
+            return@withContext call(model, body).also { label = model }
+        } catch (e: Busy) { busy = e }
+        for (m in fallbacks()) {
+            try {
+                return@withContext call(m, body).also { label = m }
+            } catch (e: Busy) { busy = e }
+        }
+        throw AiUnavailable(if (busy.code == 429)
+            "Gemini's free quota is used up for now. Try again in a minute, or later today if it keeps happening."
+        else "Gemini is overloaded right now (all models busy). Try again in a minute.")
+    }
+
+    /** Older Flash models, newest first, then Flash-Lite; from the live model list, cached per process. */
+    private suspend fun fallbacks(): List<String> {
+        val ids = cachedIds ?: runCatching { ModelCatalog.list(Provider.GEMINI, apiKey).map { it.id } }.getOrNull()
+            ?.also { cachedIds = it } ?: return emptyList()
+        fun version(id: String) = Regex("""gemini-([\d.]+)-""").find(id)?.groupValues?.get(1)?.split(".")
+            ?.map { it.toIntOrNull() ?: 0 } ?: emptyList()
+        val byVersion = compareByDescending<String> { version(it).getOrElse(0) { 0 } }.thenByDescending { version(it).getOrElse(1) { 0 } }
+        val flash = ids.filter { Regex("""^gemini-[\d.]+-flash$""").matches(it) && it != model }.sortedWith(byVersion)
+        val lite = ids.filter { Regex("""^gemini-[\d.]+-flash-lite$""").matches(it) && it != model }.sortedWith(byVersion)
+        return (flash.take(2) + lite.take(1))
+    }
+
+    private class Busy(val code: Int) : Exception()
+
+    /** One request; throws [Busy] when the model is overloaded or out of quota, so the caller can try another. */
+    private fun call(model: String, body: String): String {
         val conn = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent").openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
@@ -173,24 +216,29 @@ class GeminiEngine(private val model: String, private val apiKey: String) : AiEn
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("x-goog-api-key", apiKey)
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream).bufferedReader().readText()
             if (code !in 200..299) {
                 val msg = runCatching { JSONObject(text).getJSONObject("error").getString("message") }.getOrDefault(text)
-                throw AiUnavailable(when (code) {
-                    400, 401, 403 -> "Gemini rejected the request ($code): ${msg.take(200)}. Check your API key and model in Settings."
-                    429 -> "Gemini rate limit or quota reached. Try again shortly."
-                    else -> "Gemini error $code: ${msg.take(200)}"
-                })
+                throw when (code) {
+                    429, 500, 503 -> Busy(code)
+                    400, 401, 403 -> AiUnavailable("Gemini rejected the request ($code): ${msg.take(200)}. Check your API key and model in Settings.")
+                    404 -> AiUnavailable("Gemini doesn't know the model \"$model\". Pick another one in Settings.")
+                    else -> AiUnavailable("Gemini error $code: ${msg.take(200)}")
+                }
             }
             val out = JSONObject(text).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts")
-            (0 until out.length()).map { out.getJSONObject(it) }.filter { !it.optBoolean("thought") }.joinToString("") { it.optString("text") }
+            return (0 until out.length()).map { out.getJSONObject(it) }.filter { !it.optBoolean("thought") }.joinToString("") { it.optString("text") }
         } catch (e: java.io.IOException) {
             throw AiUnavailable("Couldn't reach Gemini (${e.message}). Check your connection.")
         } finally {
             conn.disconnect()
         }
+    }
+
+    companion object {
+        @Volatile private var cachedIds: List<String>? = null
     }
 }
 
