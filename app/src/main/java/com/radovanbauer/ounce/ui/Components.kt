@@ -108,10 +108,29 @@ private fun MacroBar(label: String, value: Double, goal: Int, color: Color) {
 @Composable
 fun MacroLine(t: Totals, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodySmall) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("${t.kcal.fmt0()} kcal", style = style, fontWeight = FontWeight.SemiBold)
-        Text("P ${t.protein.fmt0()}", style = style, color = ProteinColor)
-        Text("C ${t.carbs.fmt0()}", style = style, color = CarbsColor)
-        Text("F ${t.fat.fmt0()}", style = style, color = FatColor)
+        // calories lead, a step larger than the macros
+        Text("${t.kcal.fmt0()} kcal", Modifier.alignByBaseline(), style = style, fontSize = style.fontSize * 1.2f, fontWeight = FontWeight.Bold)
+        Text("P ${t.protein.fmt0()}", Modifier.alignByBaseline(), style = style, color = ProteinColor)
+        Text("C ${t.carbs.fmt0()}", Modifier.alignByBaseline(), style = style, color = CarbsColor)
+        Text("F ${t.fat.fmt0()}", Modifier.alignByBaseline(), style = style, color = FatColor)
+    }
+}
+
+/** Big calorie number with the macros underneath, for a single meal or food summary. */
+@Composable
+fun CalorieHeadline(t: Totals) {
+    Column {
+        Row {
+            Text(t.kcal.fmt0(), Modifier.alignByBaseline(), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+            Text(" kcal", Modifier.alignByBaseline(), style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val style = MaterialTheme.typography.bodyMedium
+            Text("Protein ${t.protein.fmt0()} g", style = style, color = ProteinColor)
+            Text("Carbs ${t.carbs.fmt0()} g", style = style, color = CarbsColor)
+            Text("Fat ${t.fat.fmt0()} g", style = style, color = FatColor)
+        }
     }
 }
 

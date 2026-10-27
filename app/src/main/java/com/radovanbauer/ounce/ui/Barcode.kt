@@ -113,6 +113,6 @@ private fun ProductAmount(p: Product, confirmLabel: String, onConfirm: (Double) 
     p.servingLabel?.let { Text("1 serving = $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     NumberField("grams", grams, Modifier.fillMaxWidth()) { grams = it }
     val item = p.item(g)
-    MacroLine(com.radovanbauer.ounce.data.Totals(item.kcal, item.protein, item.carbs, item.fat), MaterialTheme.typography.titleMedium)
+    CalorieHeadline(com.radovanbauer.ounce.data.Totals(item.kcal, item.protein, item.carbs, item.fat))
     Button(onClick = { onConfirm(g) }, enabled = g > 0, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text(confirmLabel) }
 }

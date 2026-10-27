@@ -110,7 +110,7 @@ fun MealScreen(id: Long, onBack: () -> Unit) {
                         keyboardActions = KeyboardActions(onDone = { parsed?.let { save(withTime(meal, it)) } }))
                     if (parsed != null && parsed != meal.time) TextButton(onClick = { save(withTime(meal, parsed)) }) { Text("Set") }
                 }
-                MacroLine(m.totals, MaterialTheme.typography.titleSmall)
+                CalorieHeadline(m.totals)
                 meal.estimatedBy?.let {
                     Text("Estimated by $it. Check the portions: tap an item to adjust it.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
